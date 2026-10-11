@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A virtual SOC project combining Wazuh, Sysmon, Suricata, pfSense and VirusTotal to explore endpoint and network detection, alert investigation, and response workflows.">
+  <meta name="theme-color" content="#111111">
+  <title>Wazuh SOC Lab — Michael Tsan</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="name" href="../index.html">Michael Tsan</a>
+    <nav aria-label="Main navigation">
+      <a href="../index.html#research">Research</a>
+      <a href="../index.html#projects">Projects</a>
+      <a href="../index.html#contact">Contact</a>
+    </nav>
+  </header>
+
+  <main>
+    <header class="article-header">
+      <a class="back-link" href="../index.html#projects">← Back to projects</a>
+      <p class="eyebrow">PROJECT · BLUE TEAM / DETECTION ENGINEERING</p>
+      <h1>Wazuh SOC Lab</h1>
+      <p class="article-lead">A virtual security operations lab built to connect endpoint and network telemetry, validate detections with controlled activity, and practise the investigation workflow behind a security alert.</p>
+      <div class="article-meta"><span>Wazuh SIEM/XDR</span><span>Sysmon</span><span>Suricata IDS/IPS</span><span>pfSense</span><span>Windows · Linux · VMware</span></div>
+      <div class="links">
+        <a href="https://github.com/sleepyguy396/Wazuh-SOC-Lab" target="_blank" rel="noopener noreferrer">View source repository ↗</a>
+        <a href="https://github.com/sleepyguy396/Wazuh-SOC-Lab/blob/main/report.pdf" target="_blank" rel="noopener noreferrer">Read project report ↗</a>
+      </div>
+    </header>
+
+    <article class="article-body">
+      <style>
+        .soc-visual{margin:1.5rem 0;padding:1rem;border:1px solid #303a36;border-radius:10px;background:linear-gradient(145deg,#111715,#101112);overflow:hidden}
+        .soc-visual svg{display:block;width:100%;height:auto;max-height:520px}
+        .soc-visual figcaption{margin-top:.75rem;color:#a8b4af;font-size:.86rem;line-height:1.55}
+        .soc-kicker{font:600 11px/1.4 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.12em;text-transform:uppercase;color:#82d8b7}
+        .soc-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;margin:1.25rem 0}
+        .soc-panel{border:1px solid #303a36;border-radius:9px;padding:1rem;background:#121514}
+        .soc-panel h3{margin-top:.15rem}
+        .soc-panel p:last-child{margin-bottom:0}
+        .soc-table-wrap{overflow-x:auto;margin:1.2rem 0}
+        .soc-table{width:100%;border-collapse:collapse;font-size:.94rem;min-width:620px}
+        .soc-table th,.soc-table td{border:1px solid #303a36;padding:.75rem;text-align:left;vertical-align:top}
+        .soc-table th{color:#d6e5dd;background:#171d1a}
+        .soc-table td{color:#c5ceca}
+        .soc-pill{display:inline-block;border:1px solid #365548;border-radius:99px;padding:.16rem .55rem;margin:.12rem .15rem .12rem 0;color:#a6e4c9;font-size:.78rem}
+        .soc-callout{border-left:3px solid #82d8b7;padding:.75rem 1rem;background:#141a17;color:#cbd5d0;margin:1.1rem 0}
+        .soc-code{font: .9rem/1.65 ui-monospace,SFMono-Regular,Consolas,monospace;color:#c6e5d6;background:#0c100e;border:1px solid #29332e;border-radius:7px;padding:.9rem;overflow-x:auto;white-space:pre}
+        @media(max-width:700px){.soc-grid{grid-template-columns:1fr}.soc-visual{padding:.6rem}.soc-table{font-size:.86rem}}
+      </style>
+
+      <section>
+        <h2>01 — Objective: build a detection workflow, not just a dashboard</h2>
+        <p>This lab connects endpoint telemetry, network inspection, firewall events and file-reputation context in one virtual environment. The engineering question is not simply whether Wazuh is running: it is whether an activity produces observable evidence, whether that evidence reaches the SIEM, and whether the resulting alert gives an analyst enough context to investigate.</p>
+        <div class="soc-grid">
+          <div class="soc-panel"><span class="soc-kicker">Detection surface</span><h3>Endpoint + network</h3><p>Sysmon and Windows logging describe host behaviour; Suricata and pfSense add network and firewall perspectives. Wazuh is the place to review those different signal types together.</p></div>
+          <div class="soc-panel"><span class="soc-kicker">Analyst outcome</span><h3>Evidence over assumptions</h3><p>Controlled SSH brute-force activity is documented as detected. Other integrations provide additional visibility, but each signal still needs interpretation and scenario-specific validation.</p></div>
+        </div>
+      </section>
+
+      <section>
+        <h2>02 — Architecture and telemetry flow</h2>
+        <p>The repository describes a VMware-based lab with a Wazuh core server, a Windows monitoring host, a Kali test host, a pfSense gateway and a Suricata sensor. VirusTotal is used as an external reputation-enrichment layer for file hashes associated with monitored file changes.</p>
+        <figure class="soc-visual">
+          <a href="https://github.com/sleepyguy396/Wazuh-SOC-Lab/blob/main/diagram.png" target="_blank" rel="noopener noreferrer">
+            <img src="https://raw.githubusercontent.com/sleepyguy396/Wazuh-SOC-Lab/main/diagram.png" alt="Original Wazuh SOC Lab architecture diagram from the project repository" loading="lazy" style="display:block;width:100%;height:auto;border-radius:5px;">
+          </a>
+          <figcaption>Original architecture diagram from the repository. Open the image to inspect the project-authored topology.</figcaption>
+        </figure>
+        <figure class="soc-visual">
+          <svg viewBox="0 0 760 300" role="img" aria-labelledby="pipeline-title pipeline-desc" xmlns="http://www.w3.org/2000/svg">
+            <title id="pipeline-title">SOC telemetry and investigation pipeline</title><desc id="pipeline-desc">Windows and Linux test activity creates endpoint and network events, which are collected by Wazuh and reviewed by an analyst. File hashes can be enriched with VirusTotal reputation context.</desc>
+            <defs><marker id="soc-arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#82d8b7"/></marker></defs>
+            <rect x="12" y="20" width="172" height="64" rx="8" fill="#17221d" stroke="#4b8a70"/><text x="98" y="43" fill="#d8f5e7" font-size="13" text-anchor="middle" font-weight="700">TEST ACTIVITY</text><text x="98" y="62" fill="#a8b9b0" font-size="11" text-anchor="middle">SSH / file changes</text>
+            <rect x="12" y="112" width="172" height="64" rx="8" fill="#17221d" stroke="#4b8a70"/><text x="98" y="135" fill="#d8f5e7" font-size="13" text-anchor="middle" font-weight="700">TELEMETRY</text><text x="98" y="154" fill="#a8b9b0" font-size="11" text-anchor="middle">Sysmon · Windows logs</text>
+            <rect x="12" y="204" width="172" height="64" rx="8" fill="#17221d" stroke="#4b8a70"/><text x="98" y="227" fill="#d8f5e7" font-size="13" text-anchor="middle" font-weight="700">NETWORK SIGNALS</text><text x="98" y="246" fill="#a8b9b0" font-size="11" text-anchor="middle">Suricata · pfSense</text>
+            <rect x="286" y="78" width="190" height="128" rx="10" fill="#19221e" stroke="#82d8b7" stroke-width="1.6"/><text x="381" y="108" fill="#e0f7eb" font-size="16" text-anchor="middle" font-weight="700">Wazuh</text><text x="381" y="131" fill="#b8c9c0" font-size="12" text-anchor="middle">Collect · decode</text><text x="381" y="149" fill="#b8c9c0" font-size="12" text-anchor="middle">Correlate · alert</text><text x="381" y="167" fill="#b8c9c0" font-size="12" text-anchor="middle">Index · investigate</text><text x="381" y="188" fill="#82d8b7" font-size="10" text-anchor="middle">CENTRAL ANALYSIS</text>
+            <rect x="574" y="34" width="172" height="70" rx="8" fill="#17221d" stroke="#4b8a70"/><text x="660" y="59" fill="#d8f5e7" font-size="13" text-anchor="middle" font-weight="700">ANALYST</text><text x="660" y="78" fill="#a8b9b0" font-size="11" text-anchor="middle">Triage · validate</text>
+            <rect x="574" y="160" width="172" height="70" rx="8" fill="#1c1b15" stroke="#b19a57"/><text x="660" y="185" fill="#f5e7b9" font-size="13" text-anchor="middle" font-weight="700">HASH ENRICHMENT</text><text x="660" y="204" fill="#c8bea0" font-size="11" text-anchor="middle">VirusTotal context</text>
+            <path d="M184 52 H232 V105 H286" fill="none" stroke="#82d8b7" stroke-width="1.8" marker-end="url(#soc-arrow)"/><path d="M184 144 H286" fill="none" stroke="#82d8b7" stroke-width="1.8" marker-end="url(#soc-arrow)"/><path d="M184 236 H232 V180 H286" fill="none" stroke="#82d8b7" stroke-width="1.8" marker-end="url(#soc-arrow)"/><path d="M476 111 H526 V69 H574" fill="none" stroke="#82d8b7" stroke-width="1.8" marker-end="url(#soc-arrow)"/><path d="M476 177 H526 V195 H574" fill="none" stroke="#d8b96a" stroke-width="1.8" marker-end="url(#soc-arrow)"/>
+            <text x="380" y="288" fill="#83928a" font-size="10" text-anchor="middle">Conceptual data flow based on the documented integrations; not a packet-level network map.</text>
+          </svg>
+          <figcaption>Analysis diagram created for this case study. It summarises the documented roles and logical relationships; it is not a screenshot or a claim that every event source was tested in every scenario.</figcaption>
+        </figure>
+        <div class="soc-table-wrap"><table class="soc-table"><thead><tr><th>Component</th><th>What it contributes</th><th>Question during investigation</th></tr></thead><tbody>
+          <tr><td>Wazuh</td><td>Central event collection, decoding, rules and alert review.</td><td>Which rule fired, and which fields support the alert?</td></tr>
+          <tr><td>Windows + Sysmon</td><td>Process, file and other host activity available through configured logging.</td><td>What changed on the endpoint around the alert time?</td></tr>
+          <tr><td>Suricata</td><td>Network inspection and IDS/IPS alerts.</td><td>Is there a network observation that adds context to the endpoint event?</td></tr>
+          <tr><td>pfSense</td><td>Firewall and policy-related records forwarded to Wazuh.</td><td>Was traffic allowed or blocked, according to the available log?</td></tr>
+          <tr><td>VirusTotal</td><td>Reputation context for file hashes associated with monitored changes.</td><td>Does reputation add useful context, and is the hash match meaningful?</td></tr>
+        </tbody></table></div>
+      </section>
+
+      <section>
+        <h2>03 — Investigation 01: SSH brute-force detection</h2>
+        <p>The README documents a controlled SSH brute-force simulation with Hydra inside the virtual lab. Repeated authentication failures were detected by Wazuh and generated alerts for review. The useful analytical chain is to connect the repeated failures to the source, timing and authentication outcome, then decide whether the evidence supports escalation or a defensive response.</p>
+        <figure class="soc-visual">
+          <svg viewBox="0 0 760 230" role="img" aria-labelledby="ssh-title ssh-desc" xmlns="http://www.w3.org/2000/svg">
+            <title id="ssh-title">SSH brute-force investigation sequence</title><desc id="ssh-desc">A controlled test source generates repeated SSH authentication failures. The endpoint records authentication events, Wazuh raises alerts, and an analyst validates the sequence before considering response options.</desc>
+            <defs><marker id="ssh-arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#82d8b7"/></marker></defs>
+            <line x1="130" y1="86" x2="632" y2="86" stroke="#456956" stroke-width="2" marker-end="url(#ssh-arrow)"/>
+            <g><circle cx="88" cy="86" r="27" fill="#19251f" stroke="#82d8b7" stroke-width="1.5"/><text x="88" y="91" text-anchor="middle" fill="#dff6e9" font-size="13" font-weight="700">01</text><text x="88" y="132" text-anchor="middle" fill="#e1e9e4" font-size="13" font-weight="700">Generate</text><text x="88" y="151" text-anchor="middle" fill="#9eada4" font-size="11">Controlled SSH</text><text x="88" y="166" text-anchor="middle" fill="#9eada4" font-size="11">attempts</text></g>
+            <g><circle cx="282" cy="86" r="27" fill="#19251f" stroke="#82d8b7" stroke-width="1.5"/><text x="282" y="91" text-anchor="middle" fill="#dff6e9" font-size="13" font-weight="700">02</text><text x="282" y="132" text-anchor="middle" fill="#e1e9e4" font-size="13" font-weight="700">Collect</text><text x="282" y="151" text-anchor="middle" fill="#9eada4" font-size="11">Authentication</text><text x="282" y="166" text-anchor="middle" fill="#9eada4" font-size="11">events</text></g>
+            <g><circle cx="478" cy="86" r="27" fill="#19251f" stroke="#82d8b7" stroke-width="1.5"/><text x="478" y="91" text-anchor="middle" fill="#dff6e9" font-size="13" font-weight="700">03</text><text x="478" y="132" text-anchor="middle" fill="#e1e9e4" font-size="13" font-weight="700">Alert</text><text x="478" y="151" text-anchor="middle" fill="#9eada4" font-size="11">Wazuh detects</text><text x="478" y="166" text-anchor="middle" fill="#9eada4" font-size="11">repeated failures</text></g>
+            <g><circle cx="674" cy="86" r="27" fill="#282316" stroke="#d8b96a" stroke-width="1.5"/><text x="674" y="91" text-anchor="middle" fill="#f5e7b9" font-size="13" font-weight="700">04</text><text x="674" y="132" text-anchor="middle" fill="#e1e9e4" font-size="13" font-weight="700">Triage</text><text x="674" y="151" text-anchor="middle" fill="#9eada4" font-size="11">Check context</text><text x="674" y="166" text-anchor="middle" fill="#9eada4" font-size="11">and next action</text></g>
+            <rect x="18" y="194" width="724" height="25" rx="5" fill="#151a17" stroke="#303a36"/><text x="380" y="210" text-anchor="middle" fill="#b8c8bf" font-size="11">Response options discussed in the repo: stronger authentication, account lockout and Active Response.</text>
+          </svg>
+          <figcaption>Investigation sequence based on the README. The repository describes Active Response as an option explored; this page does not claim automated blocking was independently verified by the evidence available here.</figcaption>
+        </figure>
+        <h3>What an analyst should verify</h3>
+        <ol>
+          <li>Group related failures by source and time window rather than treating each failure as a separate incident.</li>
+          <li>Check whether the target account and authentication service are consistent across the event sequence.</li>
+          <li>Look for a subsequent successful login or other relevant host activity before concluding that access was obtained.</li>
+          <li>Record the alert rule and supporting event fields so the conclusion can be reproduced.</li>
+        </ol>
+        <div class="soc-callout"><strong>Interpretation boundary:</strong> repeated failures support a brute-force detection hypothesis. They do not, by themselves, prove a successful compromise. A successful login or follow-on activity needs separate evidence.</div>
+        <p><a href="https://github.com/sleepyguy396/Wazuh-SOC-Lab/tree/main/Brute%20Force%20Attack" target="_blank" rel="noopener noreferrer">Inspect the repository's brute-force scenario materials ↗</a></p>
+      </section>
+
+      <section>
+        <h2>04 — Investigation 02: File Integrity Monitoring and reputation context</h2>
+        <p>Wazuh FIM is configured to monitor selected Windows directories for file creation, modification and deletion. The repository also describes a VirusTotal integration that looks up hashes associated with monitored file changes. These functions answer different questions: FIM records that a file changed; reputation enrichment may add external context about the observed hash.</p>
+        <figure class="soc-visual">
+          <svg viewBox="0 0 760 205" role="img" aria-labelledby="fim-title fim-desc" xmlns="http://www.w3.org/2000/svg">
+            <title id="fim-title">FIM and hash reputation analysis</title><desc id="fim-desc">A file change is observed by FIM, event details and hash are collected, the hash can be queried for external reputation context, and the analyst reviews the combined evidence.</desc>
+            <defs><marker id="fim-arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#82d8b7"/></marker></defs>
+            <g font-size="12" text-anchor="middle"><rect x="12" y="35" width="150" height="75" rx="8" fill="#17221d" stroke="#4b8a70"/><text x="87" y="62" fill="#dff6e9" font-weight="700">File changes</text><text x="87" y="82" fill="#a8b9b0" font-size="10">Create / modify / delete</text>
+            <rect x="207" y="35" width="150" height="75" rx="8" fill="#17221d" stroke="#4b8a70"/><text x="282" y="62" fill="#dff6e9" font-weight="700">Wazuh FIM</text><text x="282" y="82" fill="#a8b9b0" font-size="10">Record monitored change</text>
+            <rect x="402" y="35" width="150" height="75" rx="8" fill="#1c1b15" stroke="#b19a57"/><text x="477" y="62" fill="#f5e7b9" font-weight="700">Hash lookup</text><text x="477" y="82" fill="#c8bea0" font-size="10">VirusTotal context</text>
+            <rect x="597" y="35" width="150" height="75" rx="8" fill="#17221d" stroke="#4b8a70"/><text x="672" y="62" fill="#dff6e9" font-weight="700">Analyst review</text><text x="672" y="82" fill="#a8b9b0" font-size="10">Correlate and decide</text></g>
+            <path d="M162 72H207M357 72H402M552 72H597" stroke="#82d8b7" stroke-width="1.7" marker-end="url(#fim-arrow)"/>
+            <text x="380" y="146" fill="#b8c8bf" font-size="11" text-anchor="middle">A reputation result is a context signal — not a verdict on its own.</text><text x="380" y="166" fill="#829188" font-size="10" text-anchor="middle">Validate the file path, hash, source, timestamp and surrounding endpoint activity.</text>
+          </svg>
+          <figcaption>Conceptual FIM-to-enrichment workflow based on the documented integration; individual file verdicts depend on the returned reputation data and surrounding evidence.</figcaption>
+        </figure>
+        <div class="soc-grid">
+          <div class="soc-panel"><span class="soc-kicker">Signal A</span><h3>File integrity event</h3><p>Establishes that a monitored path changed. Review the path, action, timestamp and any available file metadata before deciding whether the change is suspicious.</p></div>
+          <div class="soc-panel"><span class="soc-kicker">Signal B</span><h3>Hash reputation</h3><p>Adds external context for the file hash. A benign or unknown reputation does not prove safety; a positive match still needs to be interpreted alongside the local event.</p></div>
+        </div>
+        <p><a href="https://github.com/sleepyguy396/Wazuh-SOC-Lab/tree/main/Wazuh" target="_blank" rel="noopener noreferrer">Inspect Wazuh configuration and materials ↗</a></p>
+      </section>
+
+      <section>
+        <h2>05 — Network visibility: Suricata + pfSense</h2>
+        <p>Suricata is documented as the network inspection layer, using Npcap and custom rule sets; its alerts are forwarded into Wazuh. pfSense supplies firewall records, with custom decoders and rules for selected allowed, blocked and authentication-related activity. These sources can complement endpoint logs, but they are not interchangeable: an IDS alert describes what the sensor recognised, while a firewall record describes a policy or traffic event visible to the gateway.</p>
+        <div class="soc-table-wrap"><table class="soc-table"><thead><tr><th>Evidence source</th><th>Can help answer</th><th>Do not infer automatically</th></tr></thead><tbody>
+          <tr><td>Suricata alert</td><td>Did the sensor match traffic against a detection rule?</td><td>That the endpoint was compromised or the traffic succeeded.</td></tr>
+          <tr><td>pfSense event</td><td>What connection or policy event did the firewall record?</td><td>That an application-level action completed.</td></tr>
+          <tr><td>Sysmon / Windows logs</td><td>What process or host activity was recorded?</td><td>That all network traffic or all process behaviour was logged.</td></tr>
+        </tbody></table></div>
+        <p>For an investigation, align timestamps and available source/destination fields, then look for agreement between independent sources. If only one layer has an event, treat it as a lead to investigate rather than a complete incident narrative.</p>
+        <p><a href="https://github.com/sleepyguy396/Wazuh-SOC-Lab/tree/main/Suricata" target="_blank" rel="noopener noreferrer">Suricata materials ↗</a> · <a href="https://github.com/sleepyguy396/Wazuh-SOC-Lab/tree/main/Pfsense" target="_blank" rel="noopener noreferrer">pfSense materials ↗</a></p>
+      </section>
+
+      <section>
+        <h2>06 — Validation approach</h2>
+        <p>A useful detection test needs an expected result and evidence that the configured pipeline produced it. The repository describes a successful SSH brute-force detection exercise and documents the integrations. The following checklist captures the validation discipline I use when evaluating such a lab:</p>
+        <div class="soc-table-wrap"><table class="soc-table"><thead><tr><th>Validation step</th><th>Evidence to retain</th><th>Why it matters</th></tr></thead><tbody>
+          <tr><td>Generate a controlled event</td><td>Scenario, time, source and target</td><td>Creates a known starting point for the investigation.</td></tr>
+          <tr><td>Confirm collection</td><td>Relevant endpoint or sensor event</td><td>Separates a logging gap from a detection-rule issue.</td></tr>
+          <tr><td>Inspect the alert</td><td>Rule ID, severity, timestamp and relevant fields</td><td>Shows what the SIEM actually concluded.</td></tr>
+          <tr><td>Correlate context</td><td>Related events from other available sources</td><td>Reduces the risk of over-interpreting a single alert.</td></tr>
+          <tr><td>Record limits</td><td>Missing events, untested cases and assumptions</td><td>Keeps the claim proportional to the evidence.</td></tr>
+        </tbody></table></div>
+      </section>
+
+      <section>
+        <h2>07 — What the project demonstrates</h2>
+        <p>The strongest part of this project is the integration mindset: endpoint, network, firewall and reputation data answer different questions, and an analyst has to combine them without overstating any one source.</p>
+        <p><span class="soc-pill">Wazuh SIEM</span><span class="soc-pill">Sysmon telemetry</span><span class="soc-pill">Suricata IDS/IPS</span><span class="soc-pill">pfSense logging</span><span class="soc-pill">File Integrity Monitoring</span><span class="soc-pill">Threat-intelligence enrichment</span><span class="soc-pill">Alert triage</span></p>
+        <ul>
+          <li>Integrating multiple defensive tools into one virtual monitoring workflow.</li>
+          <li>Relating controlled authentication activity to SIEM alerts.</li>
+          <li>Using FIM events and hash reputation as complementary evidence.</li>
+          <li>Distinguishing endpoint, network-sensor and firewall telemetry.</li>
+          <li>Documenting what was tested, what evidence exists and where the limits remain.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>08 — Scope and limitations</h2>
+        <ul>
+          <li>This is a personal virtual lab, not a production SOC deployment.</li>
+          <li>Detection coverage depends on enabled logging, sensor placement, rules and the scenario tested.</li>
+          <li>A Suricata match, firewall record or file-reputation result is not proof of compromise by itself.</li>
+          <li>The public README describes Active Response as a defensive capability explored; the available material does not justify claiming that automatic blocking was fully validated end-to-end.</li>
+          <li>The diagrams in this page are explanatory summaries. The repository's original diagram and report remain the primary project artifacts.</li>
+        </ul>
+        <p>All attack simulation described by the project is for the controlled virtual lab or other systems where explicit permission has been granted.</p>
+      </section>
+
+      <section>
+        <h2>Evidence and source materials</h2>
+        <p>Use these artifacts to inspect the implementation and compare this write-up with the source material:</p>
+        <ul>
+          <li><a href="https://github.com/sleepyguy396/Wazuh-SOC-Lab" target="_blank" rel="noopener noreferrer">Source repository ↗</a></li>
+          <li><a href="https://github.com/sleepyguy396/Wazuh-SOC-Lab/blob/main/report.pdf" target="_blank" rel="noopener noreferrer">Project report (PDF) ↗</a></li>
+          <li><a href="https://github.com/sleepyguy396/Wazuh-SOC-Lab/blob/main/diagram.png" target="_blank" rel="noopener noreferrer">Original architecture diagram ↗</a></li>
+          <li><a href="https://github.com/sleepyguy396/Wazuh-SOC-Lab/tree/main/Brute%20Force%20Attack" target="_blank" rel="noopener noreferrer">Brute-force scenario ↗</a></li>
+          <li><a href="https://github.com/sleepyguy396/Wazuh-SOC-Lab/tree/main/Suricata" target="_blank" rel="noopener noreferrer">Suricata configuration ↗</a></li>
+          <li><a href="https://github.com/sleepyguy396/Wazuh-SOC-Lab/tree/main/Pfsense" target="_blank" rel="noopener noreferrer">pfSense materials ↗</a></li>
+          <li><a href="https://github.com/sleepyguy396/Wazuh-SOC-Lab/tree/main/Wazuh" target="_blank" rel="noopener noreferrer">Wazuh configuration ↗</a></li>
+          <li><a href="https://github.com/sleepyguy396/Wazuh-SOC-Lab/tree/main/Virus%20Total" target="_blank" rel="noopener noreferrer">VirusTotal integration ↗</a></li>
+        </ul>
+      </section>
+    </article>
+
+    <nav class="article-nav" aria-label="Other projects">
+      <a href="../index.html#projects">← All projects</a>
+      <a href="python-malware-behaviour-lab.html">Next: Python malware behaviour lab →</a>
+    </nav>
+  </main>
+  <footer>
+    <span>Michael Tsan</span>
+  </footer>
+</body>
+</html>

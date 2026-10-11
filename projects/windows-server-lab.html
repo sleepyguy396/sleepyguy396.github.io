@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Technical case study of Windows Server administration labs covering Active Directory, DNS, SMB permissions, FSRM, IIS and DHCP, with architecture diagrams and validation approaches.">
+  <meta name="theme-color" content="#111111">
+  <title>Windows Server Infrastructure Labs — Michael Tsan</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .case-figure{margin:1.5rem 0;padding:1rem;border:1px solid var(--border,#303030);border-radius:14px;background:var(--surface,#151515);overflow:hidden}
+    .case-figure svg{display:block;width:100%;height:auto;max-height:420px}
+    .case-figure figcaption,.small-note{font-size:.88rem;color:var(--muted,#a5a5a5);margin-top:.8rem}
+    .case-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:1rem;margin:1rem 0}
+    .case-card{border:1px solid var(--border,#303030);border-radius:12px;padding:1rem;background:var(--surface,#151515)}
+    .case-card h3{margin-top:0;font-size:1.05rem}
+    .tag-row{display:flex;flex-wrap:wrap;gap:.5rem;margin:1rem 0}
+    .tag-row span{border:1px solid var(--border,#444);border-radius:999px;padding:.3rem .65rem;font-size:.82rem;color:var(--muted,#bdbdbd)}
+    .table-wrap{overflow-x:auto} .case-table{width:100%;border-collapse:collapse;font-size:.93rem}
+    .case-table th,.case-table td{padding:.75rem;text-align:left;vertical-align:top;border-bottom:1px solid var(--border,#333)}
+    .case-table th{color:var(--muted,#bbb);font-weight:600}
+    .callout{border-left:3px solid #7dd3a7;padding:.75rem 1rem;background:rgba(125,211,167,.06);margin:1rem 0}
+    .code-line{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.9rem;overflow-wrap:anywhere}
+    .resource-list li{margin:.5rem 0}
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <a class="name" href="../index.html">Michael Tsan</a>
+    <nav aria-label="Main navigation"><a href="../index.html#research">Research</a><a href="../index.html#projects">Projects</a><a href="../index.html#contact">Contact</a></nav>
+  </header>
+  <main>
+    <header class="article-header">
+      <a class="back-link" href="../index.html">← Back to all work</a>
+      <p class="eyebrow"> · SYSTEMS & NETWORK ADMINISTRATION</p>
+      <h1>Windows Server Infrastructure Labs</h1>
+      <p class="article-lead">A collection of hands-on labs exploring how identity, name resolution, file access, storage controls, web services and address allocation work together in a small Windows environment.</p>
+      <div class="article-meta"><span>Windows Server · Active Directory · DNS · SMB/NTFS · FSRM · IIS · DHCP</span></div>
+      <div class="tag-row"><span>VMware Workstation</span><span>Windows client/server</span><span>Service validation</span><span>Security configuration</span></div>
+    </header>
+    <article class="article-body">
+      <section>
+        <h2>01 / Objective</h2>
+        <p>The repository is a sequence of focused administration labs rather than one fully automated enterprise deployment. The work covers six practical areas: simple file sharing, Active Directory and DNS, NTFS permissions, File Server Resource Manager (FSRM), IIS web-server deployment, and DHCP.</p>
+        <p>The central question is operational: <em>how can a Windows client discover a service, authenticate to it, and receive only the access or network configuration intended for it?</em> Each lab isolates one part of that workflow so configuration and troubleshooting can be documented separately.</p>
+      </section>
+      <section>
+        <h2>02 / Architecture & service relationships</h2>
+        <p>The diagram below is a conceptual view of the services documented in the repository, not a claim that every role was installed on one production-style server. The lab notes use virtual machines and sanitized documentation IPs for examples.</p>
+        <figure class="case-figure">
+          <svg viewBox="0 0 760 350" role="img" aria-labelledby="topology-title topology-desc" xmlns="http://www.w3.org/2000/svg">
+            <title id="topology-title">Windows Server lab service map</title><desc id="topology-desc">A Windows client interacts with Active Directory and DNS, file services and NTFS permissions, FSRM, IIS, and DHCP in a virtualized lab.</desc>
+            <defs><marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#79d7b0"/></marker></defs>
+            <rect x="10" y="10" width="740" height="330" rx="14" fill="#101514" stroke="#34433d"/>
+            <rect x="36" y="128" width="150" height="90" rx="10" fill="#17241f" stroke="#79d7b0"/><text x="111" y="158" fill="#e7f5ee" text-anchor="middle" font-size="16" font-weight="600">Windows client</text><text x="111" y="181" fill="#a8c9ba" text-anchor="middle" font-size="12">PC / workstation</text><text x="111" y="199" fill="#a8c9ba" text-anchor="middle" font-size="11">Domain or SMB client</text>
+            <rect x="250" y="40" width="205" height="78" rx="9" fill="#182126" stroke="#8fc8e8"/><text x="352" y="68" fill="#e5f4ff" text-anchor="middle" font-size="15" font-weight="600">Identity & naming</text><text x="352" y="88" fill="#b8d6e7" text-anchor="middle" font-size="12">Active Directory · DNS</text><text x="352" y="103" fill="#b8d6e7" text-anchor="middle" font-size="10">Domain, users, groups, lookup</text>
+            <rect x="250" y="146" width="205" height="78" rx="9" fill="#222019" stroke="#e8c77e"/><text x="352" y="173" fill="#fff2d4" text-anchor="middle" font-size="15" font-weight="600">File services</text><text x="352" y="193" fill="#e2d0a6" text-anchor="middle" font-size="12">SMB · Share + NTFS ACLs</text><text x="352" y="209" fill="#e2d0a6" text-anchor="middle" font-size="10">FSRM quota / screening</text>
+            <rect x="250" y="252" width="205" height="60" rx="9" fill="#201b27" stroke="#c3a1ed"/><text x="352" y="276" fill="#f1e7ff" text-anchor="middle" font-size="15" font-weight="600">Network services</text><text x="352" y="295" fill="#d2c1e8" text-anchor="middle" font-size="12">DHCP · IIS web role</text>
+            <rect x="525" y="99" width="190" height="142" rx="10" fill="#17241f" stroke="#79d7b0"/><text x="620" y="128" fill="#e7f5ee" text-anchor="middle" font-size="15" font-weight="600">Validation layer</text><text x="620" y="153" fill="#b5d8c8" text-anchor="middle" font-size="12">DNS lookup / domain join</text><text x="620" y="174" fill="#b5d8c8" text-anchor="middle" font-size="12">Effective access checks</text><text x="620" y="195" fill="#b5d8c8" text-anchor="middle" font-size="12">DHCP lease / web response</text><text x="620" y="216" fill="#b5d8c8" text-anchor="middle" font-size="11">Expected vs observed</text>
+            <path d="M186 151 L238 88" stroke="#79d7b0" stroke-width="2" fill="none" marker-end="url(#arr)"/><path d="M186 174 L238 184" stroke="#79d7b0" stroke-width="2" fill="none" marker-end="url(#arr)"/><path d="M186 197 L238 278" stroke="#79d7b0" stroke-width="2" fill="none" marker-end="url(#arr)"/><path d="M455 80 L515 125" stroke="#79d7b0" stroke-width="2" fill="none" marker-end="url(#arr)"/><path d="M455 184 L515 170" stroke="#79d7b0" stroke-width="2" fill="none" marker-end="url(#arr)"/><path d="M455 282 L515 216" stroke="#79d7b0" stroke-width="2" fill="none" marker-end="url(#arr)"/>
+            <text x="380" y="328" fill="#80928a" text-anchor="middle" font-size="10">Conceptual service map · roles may be split across separate VMs</text>
+          </svg>
+          <figcaption>Conceptual architecture drawn for this portfolio page. Refer to the linked lab notes and screenshots for the specific configuration demonstrated by each exercise.</figcaption>
+        </figure>
+        <div class="case-grid">
+          <div class="case-card"><h3>Identity & DNS</h3><p>AD DS provides domain identity and group membership; DNS lets clients locate the domain and its services.</p></div>
+          <div class="case-card"><h3>File access</h3><p>SMB share permissions and NTFS permissions both affect effective access. FSRM adds storage quotas and file-screening controls.</p></div>
+          <div class="case-card"><h3>Addressing & web</h3><p>DHCP distributes client network settings. IIS hosts a web service whose availability can be checked independently from domain authentication.</p></div>
+        </div>
+      </section>
+      <section>
+        <h2>03 / Lab breakdown</h2>
+        <div class="table-wrap"><table class="case-table"><thead><tr><th>Lab</th><th>Technical focus</th><th>What the exercise demonstrates</th><th>Useful validation</th></tr></thead><tbody>
+          <tr><td><strong>01</strong><br>File sharing</td><td>SMB, Guest context, share permissions</td><td>How network sharing behaviour changes under a Guest-only model and read-only share configuration.</td><td>Connect from the client; verify access is read-only and inspect the effective security context.</td></tr>
+          <tr><td><strong>02</strong><br>AD DS + DNS</td><td>Domain controller, DNS zones, OUs, groups, GPO</td><td>Build a domain, create users and groups, join a workstation, and apply account/logon policy.</td><td><code>nslookup</code>, domain join, domain-user logon, <code>gpupdate</code> and policy-result inspection.</td></tr>
+          <tr><td><strong>03</strong><br>File-server permissions</td><td>Share ACLs and NTFS ACLs</td><td>Separate network-share access from filesystem-level access decisions.</td><td>Test allowed and denied actions using accounts with different group memberships.</td></tr>
+          <tr><td><strong>03b</strong><br>FSRM</td><td>Quota management and file screening</td><td>Apply storage governance controls to a file-server workload.</td><td>Check quota state and test a controlled file-screening case against the configured policy.</td></tr>
+          <tr><td><strong>04</strong><br>Web server</td><td>IIS deployment and configuration</td><td>Configure a Windows-hosted web service and its site settings.</td><td>Request the site from a client and review service status, bindings and firewall reachability.</td></tr>
+          <tr><td><strong>05</strong><br>DHCP</td><td>Scopes and automated IP allocation</td><td>Provide client addressing from a centrally configured DHCP service.</td><td>Renew a client lease and inspect address, mask, gateway and DNS options.</td></tr>
+        </tbody></table></div>
+        <p class="small-note">The validation column describes checks appropriate to each lab; it is not a claim that every check has been independently re-run while preparing this page.</p>
+      </section>
+      <section>
+        <h2>04 / Deep dive: identity and name resolution</h2>
+        <p>The AD DS and DNS lab illustrates a dependency chain that is easy to overlook when troubleshooting: a client needs network connectivity, a correctly configured DNS resolver, records for the domain services, and valid credentials before domain authentication can succeed.</p>
+        <figure class="case-figure">
+          <svg viewBox="0 0 720 180" role="img" aria-labelledby="ad-flow-title" xmlns="http://www.w3.org/2000/svg">
+            <title id="ad-flow-title">Domain join troubleshooting flow</title>
+            <defs><marker id="adarr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#79d7b0"/></marker></defs>
+            <rect x="10" y="18" width="160" height="66" rx="8" fill="#17241f" stroke="#79d7b0"/><text x="90" y="43" fill="#e7f5ee" text-anchor="middle" font-size="13" font-weight="600">1. IP connectivity</text><text x="90" y="62" fill="#b5d8c8" text-anchor="middle" font-size="11">ipconfig / ping</text>
+            <rect x="195" y="18" width="160" height="66" rx="8" fill="#182126" stroke="#8fc8e8"/><text x="275" y="43" fill="#e5f4ff" text-anchor="middle" font-size="13" font-weight="600">2. DNS resolution</text><text x="275" y="62" fill="#b8d6e7" text-anchor="middle" font-size="11">nslookup domain / DC</text>
+            <rect x="380" y="18" width="150" height="66" rx="8" fill="#222019" stroke="#e8c77e"/><text x="455" y="43" fill="#fff2d4" text-anchor="middle" font-size="13" font-weight="600">3. Domain join</text><text x="455" y="62" fill="#e2d0a6" text-anchor="middle" font-size="11">Domain + credentials</text>
+            <rect x="555" y="18" width="155" height="66" rx="8" fill="#201b27" stroke="#c3a1ed"/><text x="632" y="43" fill="#f1e7ff" text-anchor="middle" font-size="13" font-weight="600">4. Policy check</text><text x="632" y="62" fill="#d2c1e8" text-anchor="middle" font-size="11">gpupdate / result</text>
+            <path d="M170 51H188M355 51H373M530 51H548" stroke="#79d7b0" stroke-width="2" marker-end="url(#adarr)"/>
+            <path d="M632 85V115H90V92" stroke="#6f8178" stroke-dasharray="4 4" fill="none"/><text x="360" y="140" fill="#b3c2bb" text-anchor="middle" font-size="12">If a stage fails, investigate that dependency before changing unrelated settings.</text><text x="360" y="160" fill="#7f9087" text-anchor="middle" font-size="10">Troubleshooting model, not an automatic diagnostic tool</text>
+          </svg>
+          <figcaption>Suggested validation sequence for the repository’s domain and DNS exercise.</figcaption>
+        </figure>
+        <p>In the documented lab, the domain controller is configured with a static address and points its preferred DNS to itself; the workstation uses the domain controller as its preferred DNS resolver. The notes use <code>qtm.local</code> and RFC 5737 documentation addresses such as <code>192.0.2.101</code> and <code>192.0.2.103</code> as sanitized examples.</p>
+      </section>
+      <section>
+        <h2>05 / Deep dive: effective file access</h2>
+        <p>File access is not controlled by one permission checkbox. A network user first reaches an SMB share, then Windows evaluates the share permissions and the NTFS permissions on the underlying path. The effective result depends on both layers and the user’s security token.</p>
+        <figure class="case-figure">
+          <svg viewBox="0 0 720 180" role="img" aria-labelledby="acl-title" xmlns="http://www.w3.org/2000/svg">
+            <title id="acl-title">SMB access decision layers</title>
+            <defs><marker id="aclarr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#79d7b0"/></marker></defs>
+            <rect x="20" y="35" width="145" height="76" rx="9" fill="#17241f" stroke="#79d7b0"/><text x="92" y="62" fill="#e7f5ee" text-anchor="middle" font-size="14" font-weight="600">User / group</text><text x="92" y="82" fill="#b5d8c8" text-anchor="middle" font-size="11">Security token</text>
+            <rect x="205" y="35" width="145" height="76" rx="9" fill="#182126" stroke="#8fc8e8"/><text x="277" y="62" fill="#e5f4ff" text-anchor="middle" font-size="14" font-weight="600">SMB share ACL</text><text x="277" y="82" fill="#b8d6e7" text-anchor="middle" font-size="11">Network-level rights</text>
+            <rect x="390" y="35" width="145" height="76" rx="9" fill="#222019" stroke="#e8c77e"/><text x="462" y="62" fill="#fff2d4" text-anchor="middle" font-size="14" font-weight="600">NTFS ACL</text><text x="462" y="82" fill="#e2d0a6" text-anchor="middle" font-size="11">Filesystem rights</text>
+            <rect x="575" y="35" width="125" height="76" rx="9" fill="#201b27" stroke="#c3a1ed"/><text x="637" y="62" fill="#f1e7ff" text-anchor="middle" font-size="14" font-weight="600">Effective</text><text x="637" y="80" fill="#f1e7ff" text-anchor="middle" font-size="14" font-weight="600">access</text>
+            <path d="M165 73H198M350 73H383M535 73H568" stroke="#79d7b0" stroke-width="2" marker-end="url(#aclarr)"/><text x="360" y="143" fill="#b3c2bb" text-anchor="middle" font-size="12">Validate with both an allowed and a denied operation.</text><text x="360" y="161" fill="#7f9087" text-anchor="middle" font-size="10">Conceptual model · actual outcome depends on configured ACLs</text>
+          </svg>
+          <figcaption>Permission troubleshooting model for the file-sharing and NTFS labs.</figcaption>
+        </figure>
+        <p>A good validation plan tests more than “can open folder”: check listing, read, create, modify and delete separately with accounts representing different access groups. For the Guest-only sharing exercise, use only an isolated host-only network; the deliberately weak authentication model is a teaching scenario, not a recommended production configuration.</p>
+      </section>
+      <section>
+        <h2>06 / Validation & evidence</h2>
+        <div class="case-grid">
+          <div class="case-card"><h3>Connectivity & DNS</h3><p>Capture <code>ipconfig /all</code>, successful <code>nslookup</code> output and the target address used by the test.</p></div>
+          <div class="case-card"><h3>Identity & GPO</h3><p>Show domain membership, test with a standard domain account, and capture applied policy results rather than only the policy editor.</p></div>
+          <div class="case-card"><h3>Permissions</h3><p>Record the test account, attempted action, expected outcome and observed outcome for each ACL case.</p></div>
+          <div class="case-card"><h3>Network services</h3><p>Capture the assigned DHCP lease and a client-side HTTP request to the IIS site, alongside relevant server configuration.</p></div>
+        </div>
+      </section>
+      <section>
+        <h2>07 / Security considerations & limitations</h2>
+        <ul>
+          <li>The Guest-only / password-protected-sharing-disabled configuration is intentionally permissive for demonstrating SMB behaviour. Keep it isolated and restore secure settings after the exercise.</li>
+          <li>The lab notes include disabling IPv6 as a troubleshooting/configuration step. Do not treat disabling IPv6 as a universal AD/DNS fix; first diagnose DNS registration, resolver settings and the actual network path.</li>
+          <li>Examples use sanitized documentation IP addresses. They are illustrative and should not be copied as routable production addressing.</li>
+          <li>These are focused learning labs. They do not by themselves demonstrate production high availability, a complete enterprise security baseline, or a fully automated deployment.</li>
+        </ul>
+      </section>
+      <section>
+        <h2>08 / What this project demonstrates</h2>
+        <p>This project brings together practical Windows administration skills: role configuration, centralized identity, name resolution, client onboarding, file access control, storage governance, web hosting and automated IP assignment. Its strongest value is the documented troubleshooting path—checking dependencies and validating from the client, rather than relying only on server-side configuration screens.</p>
+      </section>
+      <section>
+        <h2>Repository & lab notes</h2>
+        <ul class="resource-list">
+          <li><a href="https://github.com/sleepyguy396/windows-server-lab" target="_blank" rel="noopener noreferrer">Open the Windows Server Lab repository</a></li>
+          <li><a href="https://github.com/sleepyguy396/windows-server-lab/tree/main/Screenshots" target="_blank" rel="noopener noreferrer">Browse lab screenshots</a></li>
+          <li><a href="https://github.com/sleepyguy396/windows-server-lab/blob/main/01-Simple-File-Sharing-Lab.md" target="_blank" rel="noopener noreferrer">Lab 01 — Simple file sharing</a></li>
+          <li><a href="https://github.com/sleepyguy396/windows-server-lab/blob/main/02-Active-Directory-DNS-Lab.md" target="_blank" rel="noopener noreferrer">Lab 02 — Active Directory & DNS</a></li>
+          <li><a href="https://github.com/sleepyguy396/windows-server-lab/blob/main/03-File-Server-NTFS-Permissions-Lab.md" target="_blank" rel="noopener noreferrer">Lab 03 — File-server NTFS permissions</a></li>
+          <li><a href="https://github.com/sleepyguy396/windows-server-lab/blob/main/03b-FSRM-Quota-File-Screening-Lab.md" target="_blank" rel="noopener noreferrer">Lab 03b — FSRM quotas & file screening</a></li>
+          <li><a href="https://github.com/sleepyguy396/windows-server-lab/blob/main/04-Web-Server-Deployment-%26-Configuration.md" target="_blank" rel="noopener noreferrer">Lab 04 — Web-server deployment</a></li>
+          <li><a href="https://github.com/sleepyguy396/windows-server-lab/blob/main/05-Deploying-%26-Configuring-DHCP-Server.md" target="_blank" rel="noopener noreferrer">Lab 05 — DHCP deployment</a></li>
+        </ul>
+      </section>
+    </article>
+    <nav class="article-nav" aria-label="Other articles"><a href="soc-home-lab.html">← Previous: SOC home lab</a><a href="python-keylogger-detector.html">Next: Python keylogger detector →</a></nav>
+  </main>
+  <footer><span>Michael Tsan</span></footer>
+</body>
+</html>
