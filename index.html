@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Michael Tsan's cybersecurity research and hands-on projects.">
+  <meta name="theme-color" content="#111111">
+  <title>Michael Tsan — Security Research & Projects</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="name" href="index.html">Michael Tsan</a>
+    <nav aria-label="Main navigation">
+      <a href="#research">Research</a>
+      <a href="#projects">Projects</a>
+      <a href="#experience">Experience</a>
+      <a href="#achievements">Achievements</a>
+      <a href="#contact">Contact</a>
+    </nav>
+  </header>
+  <main id="top">
+    <section class="intro">
+      <p class="eyebrow">· SYDNEY, AUSTRALIA</p>
+      <h1>Security research<br>and things I’ve built.</h1>
+      <p class="intro-copy">I’m Michael, a cybersecurity graduate with a background in systems and network engineering. This is where I document security findings, practical labs, and what I learn along the way.</p>
+      <div class="links">
+        <a href="https://github.com/sleepyguy396" target="_blank" rel="noreferrer">GitHub ↗</a>
+        <a href="https://www.linkedin.com/in/michaeltsn" target="_blank" rel="noreferrer">LinkedIn ↗</a>
+        <a href="mailto:thongtoantsan@gmail.com">Email ↗</a>
+      </div>
+    </section>
+
+    <section class="section" id="research">
+      <div class="section-title">
+        <p class="eyebrow">01 / SECURITY RESEARCH</p>
+        <h2>Findings</h2>
+      </div>
+
+      <article class="entry">
+        <div class="entry-top">
+          <h3><a href="research/ravyn-jwt-audience.html">Ravyn — JWT audience validation</a></h3>
+          <span class="status">Fixed upstream</span>
+        </div>
+        <p>Found that the built-in JWT decoding path disabled audience checks. A controlled test reproduced cross-service token acceptance when services shared a signing key.</p>
+        <p class="meta">Python · JWT · Authentication · <a href="research/ravyn-jwt-audience.html">Read technical write-up →</a></p>
+      </article>
+
+      <p class="section-note">Write-ups will include technical details when disclosure and maintainer guidance allow.</p>
+      <article class="entry">
+        <div class="entry-top">
+          <h3><a href="research/ai-assignment-marking-security.html">AI Assignment Marking</a></h3>
+          <span class="status">3 findings</span>
+        </div>
+        <p>Reviewed an AI-powered grading application and reproduced a re-upload workflow flaw that clears stored grades, plus two distinct PDF parser failure modes. The circular <code>/Prev</code> issue was identified as a reproduction of CVE-2026-27628, not a new CVE.</p>
+        <p class="meta">FastAPI · PyPDF2 · Application security · PDF parsing · <a href="research/ai-assignment-marking-security.html">Read technical write-up →</a></p>
+      </article>
+    </section>
+
+    <section class="section" id="projects">
+      <div class="section-title">
+        <p class="eyebrow">02 / PERSONAL PROJECTS</p>
+        <h2>Labs & builds</h2>
+      </div>
+      <article class="entry">
+        <h3><a href="projects/soc-home-lab.html">SOC home lab</a></h3>
+        <p>A small detection lab using Wazuh and Sysmon to collect endpoint events, test detection rules, and practise alert triage.</p>
+        <p class="meta">Wazuh · Sysmon · Windows · Linux · <a href="projects/soc-home-lab.html">Read project →</a></p>
+      </article>
+      <article class="entry">
+        <h3><a href="projects/python-malware-behaviour-lab.html">Python malware behaviour lab</a></h3>
+        <p>An isolated lab for studying file changes and other behaviours associated with ransomware-like activity.</p>
+        <p class="meta">Python · Windows · Safe simulation · <a href="projects/python-malware-behaviour-lab.html">Read project →</a></p>
+      </article>
+      <article class="entry">
+        <h3><a href="projects/windows-server-lab.html">Windows Server infrastructure lab</a></h3>
+        <p>A hands-on setup for domain services, user access, Group Policy, DNS, and DHCP.</p>
+        <p class="meta">Windows Server · Active Directory · Networking · <a href="projects/windows-server-lab.html">Read project →</a></p>
+      </article>
+      <article class="entry">
+        <h3><a href="projects/python-keylogger-detector.html">Python keylogger & detector</a></h3>
+        <p>A learning project exploring suspicious process and file-I/O activity in a controlled environment.</p>
+        <p class="meta">Python · Process analysis · File I/O · <a href="projects/python-keylogger-detector.html">Read project →</a></p>
+      </article>
+    </section>
+
+    <section class="section compact" id="experience">
+      <div class="section-title">
+        <p class="eyebrow">03 / PROFESSIONAL BACKGROUND</p>
+        <h2>Experience</h2>
+      </div>
+      <article class="entry">
+        <div class="entry-top">
+          <h3>Systems & Network Engineer · Ozitem Groupe</h3>
+          <span class="meta">Aug 2024 – Oct 2025</span>
+        </div>
+        <p class="experience-summary">Delivered Level 1/2 infrastructure support across enterprise and healthcare environments, working across endpoints, Windows and Linux systems, virtualisation, network connectivity, backup, monitoring, and security maintenance.</p>
+        <ul class="detail-list">
+          <li><strong>Service desk & endpoint support:</strong> Resolved approximately 20–100+ L1/L2 tickets per week through iTop, troubleshooting Windows, Linux, macOS, VMware, user access, and infrastructure issues.</li>
+          <li><strong>Network operations:</strong> Investigated LAN/WAN, routing, VPN, and ISP connectivity incidents using Centreon monitoring, supporting reported SLA performance of 99.5%+.</li>
+          <li><strong>Security maintenance:</strong> Led security patching and firewall upgrade activities across 15+ sites, addressing critical vulnerabilities while coordinating changes to minimise business disruption.</li>
+          <li><strong>Backup & recovery:</strong> Administered Veeam Backup & Replication for 50+ servers, supporting backup operations, recovery readiness, and reported service uptime of 99%+.</li>
+          <li><strong>Scripting & incident response:</strong> Used Bash to automate recurring IT tasks, contributing to a reported 20% reduction in recurring incidents; provided after-hours response for critical outages, helping reduce unplanned downtime by 20–30%.</li>
+        </ul>
+        <p class="meta">Focus areas: IT operations · Endpoint and server support · Networking · Security patching · Backup and disaster recovery · Monitoring</p>
+      </article>
+      <article class="entry education-entry">
+        <div class="entry-top">
+          <h3>Bachelor of Information Technology (Cybersecurity) · Van Lang University</h3>
+          <span class="meta">Sep 2021 – Aug 2025</span>
+        </div>
+        <p>Coursework included network security, operating systems, cryptography, penetration testing, network system design, and IoT security. Graduation project researched and deployed elliptic-curve cryptography for secure IoT healthcare data transmission using ESP32.</p>
+      </article>
+    </section>
+
+    <section class="section compact" id="achievements">
+      <div class="section-title">
+        <p class="eyebrow">04 / ACHIEVEMENTS</p>
+        <h2>Achievements</h2>
+      </div>
+
+      <article class="entry">
+        <div class="entry-top">
+          <h3>ASEAN Student Contest on Information Security (ASCIS) 2023</h3>
+          <span class="meta">Jul 2023</span>
+        </div>
+        <p>Ranked 29th out of 400+ teams in a regional cybersecurity competition involving teams from 10 ASEAN countries.</p>
+      </article>
+
+      <article class="entry">
+        <div class="entry-top">
+          <h3>Van Lang University CTF Competition</h3>
+          <span class="meta">May 2023</span>
+        </div>
+        <p>Achieved 1st place in the university's internal selection competition to represent Van Lang University at ASCIS 2023.</p>
+      </article>
+    </section>
+
+    <section class="contact" id="contact">
+      <p class="eyebrow">05 / CONTACT</p>
+      <h2>Have something interesting to discuss?</h2>
+      <p>I’m open to conversations about security research and opportunities.</p>
+      <a class="contact-link" href="mailto:thongtoantsan@gmail.com">thongtoantsan@gmail.com</a>
+    </section>
+  </main>
+  <footer>
+    <span>Michael Tsan</span>
+  </footer>
+</body>
+</html>
