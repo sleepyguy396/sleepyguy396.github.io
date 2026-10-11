@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Technical research notes on missing JWT audience validation in Ravyn's built-in authentication flow.">
+  <meta name="theme-color" content="#111111">
+  <title>Ravyn — JWT Audience Validation | Michael Tsan</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="name" href="../index.html">Michael Tsan</a>
+    <nav aria-label="Main navigation">
+      <a href="../index.html#research">Research</a>
+      <a href="../index.html#projects">Projects</a>
+      <a href="../index.html#contact">Contact</a>
+    </nav>
+  </header>
+
+  <main>
+    <header class="article-header">
+      <a class="back-link" href="../index.html#research">← Back to research</a>
+      <p class="eyebrow">SECURITY RESEARCH · AUTHENTICATION</p>
+      <h1>Ravyn: JWT audience validation disabled</h1>
+      <p class="article-lead">A source-code review found that Ravyn's built-in JWT decoding path disables audience validation. In a shared-trust, multi-service setup, this can let a valid token issued for one service be accepted by another service.</p>
+      <div class="article-meta">
+        <span>Python</span><span>JWT / PyJWT</span><span>Source-code audit</span><span>Responsible disclosure</span>
+      </div>
+    </header>
+
+    <article class="article-body">
+      <div class="note">
+        <strong>Disclosure note.</strong> Ravyn <code>v0.4.3</code> was released on 28 September 2026 and its official release notes describe the JWT audience/issuer validation fix and credit <code>@sleepyguy396</code>.
+      </div>
+
+      <section>
+        <h2>Summary</h2>
+        <p>JSON Web Tokens (JWTs) can carry an <code>aud</code> claim, which identifies the service or recipient the token was issued for. If Service A and Service B trust the same signing key, audience validation helps prevent a token meant for Service B from being reused against Service A.</p>
+        <p>In the versions I inspected, <code>ravyn.security.jwt.token.Token.decode()</code> called PyJWT with <code>options={"verify_aud": False}</code>. That setting disables audience verification even if a caller also supplies an <code>audience=</code> argument. The built-in authentication backends did not pass an audience, and <code>JWTConfig</code> did not expose an audience setting.</p>
+        <p>The issue is not a signature forgery. The token still has to be validly signed by a key trusted by the target service. The flaw is that the framework does not check whether that otherwise-valid token was intended for the target audience.</p>
+      </section>
+
+      <section>
+        <h2>Finding at a glance</h2>
+        <ul>
+          <li><strong>Component:</strong> <code>ravyn/security/jwt/token.py</code></li>
+          <li><strong>Function:</strong> <code>Token.decode()</code></li>
+          <li><strong>Authentication paths reviewed:</strong> <code>common</code>, <code>edgy</code>, and <code>mongoz</code> built-in backends.</li>
+          <li><strong>Affected versions reported:</strong> Ravyn <code>v0.1.0</code> through <code>v0.4.2</code>; tested checkout <code>054ee1494ad8d662af531cafc5c74008514bf7b7</code>. This is the affected range stated in my report; check the upstream advisory for the final official range.</li>
+          <li><strong>Fixed in:</strong> <a href="https://github.com/dymmond/ravyn/releases/tag/v0.4.3" target="_blank" rel="noopener noreferrer">Ravyn <code>v0.4.3</code></a>, according to the official release notes.</li>
+          <li><strong>Root cause:</strong> audience verification is hard-disabled, and the built-in backend offers no audience configuration.</li>
+          <li><strong>Classification considered:</strong> CWE-287 — Improper Authentication.</li>
+        </ul>
+        <p class="placeholder">The inspected versions and commit describe the research environment, not a claim that every intermediate tag was individually tested.</p>
+      </section>
+
+      <section>
+        <h2>Root cause in the code</h2>
+        <p>The relevant call in <code>Token.decode()</code> passes a fixed options dictionary to PyJWT:</p>
+        <pre><code>data = jwt.decode(
+    jwt=token,
+    key=key,
+    algorithms=algorithms,
+    options={"verify_aud": False},
+    **kwargs,
+)</code></pre>
+        <p>The function accepts <code>**kwargs</code>, so <code>audience="service-A"</code> can be passed into it. However, the fixed <code>verify_aud=False</code> option tells PyJWT not to perform the audience check. In the built-in authentication path, the issue is more direct: <code>CommonJWTAuthBackend.authenticate()</code> calls <code>Token.decode()</code> with the signing key and algorithm only, without an audience or issuer.</p>
+        <p>The Edgy and MongoZ backends inherit that authentication method. After decoding, the backend looks up the user using <code>token.sub</code>. It does not compare <code>aud</code> against the service receiving the request.</p>
+      </section>
+
+      <section>
+        <h2>Why the audience claim matters</h2>
+        <p>Imagine two separate services that share a signing key but are intended to accept different tokens:</p>
+        <pre><code>Service A expects: aud = "service-A"
+Service B expects: aud = "service-B"
+
+Token issued for B:
+  sub = "1"
+  aud = "service-B"</code></pre>
+        <p>If that token is sent to Service A, a correct audience check should reject it because <code>service-B</code> does not match <code>service-A</code>. With the vulnerable code path, signature validation succeeds and the audience mismatch is ignored.</p>
+        <p>This only becomes a practical cross-service issue when services share a signing/trust configuration and are meant to be separated by audience. A single-service deployment with no other audience to confuse does not have this same attack path.</p>
+      </section>
+
+      <section>
+        <h2>Validation: PyJWT control test</h2>
+        <p>I first compared PyJWT's normal behavior with the call shape used by Ravyn. The test created a short-lived, locally signed token for <code>service-B</code> and attempted to decode it as a token for <code>service-A</code>.</p>
+        <pre><code># Normal PyJWT call
+jwt.decode(
+    token,
+    key,
+    algorithms=["HS256"],
+    audience="service-A",
+)
+# Raises: InvalidAudienceError
+
+# Same call shape as Ravyn
+jwt.decode(
+    token,
+    key,
+    algorithms=["HS256"],
+    options={"verify_aud": False},
+    audience="service-A",
+)
+# Accepted</code></pre>
+        <p>This control isolated the behavior to the wrapper's options: PyJWT rejected the mismatched audience when audience verification was enabled, and accepted it when <code>verify_aud</code> was explicitly disabled.</p>
+      </section>
+
+      <section>
+        <h2>End-to-end reproduction</h2>
+        <p>I then tested the actual <code>ravyn.contrib.auth.edgy</code> JWT authentication flow rather than relying only on a direct call to <code>Token.decode()</code>. The local test created two ASGI applications with separate SQLite databases and the same HS256 signing key.</p>
+        <ul>
+          <li><strong>Service A:</strong> user ID <code>1</code> was <code>alice-admin</code>, a superuser.</li>
+          <li><strong>Service B:</strong> user ID <code>1</code> was <code>mallory</code>, an ordinary user.</li>
+          <li>Each service received a token with its own audience claim.</li>
+        </ul>
+        <p>The ID collision was deliberate: independent databases commonly assign the first row ID <code>1</code>, and it made the identity-resolution effect easy to observe in a deterministic lab.</p>
+        <pre><code>Control: Service A token -> Service A
+HTTP 200 · authenticated_as=alice-admin
+
+Control: Service B token -> Service B
+HTTP 200 · authenticated_as=mallory
+
+No token -> Service A
+HTTP 401
+
+Service B token -> Service A
+Expected: reject audience mismatch
+Actual: HTTP 200
+         authenticated_as=alice-admin
+         is_superuser=true
+         data=A-INTERNAL-DATA</code></pre>
+        <p>The target service accepted the Service B token, then resolved its <code>sub</code> value against Service A's own user table. Since that table mapped ID <code>1</code> to the superuser, the request ran as that account in the constructed demonstration.</p>
+        <div class="note"><strong>Scope of this result:</strong> the identity collision was intentionally arranged for the proof of concept. It demonstrates the possible consequence of accepting a wrong-audience token; it does not mean every real deployment will map a token subject to a privileged account.</div>
+      </section>
+
+      <section>
+        <h2>Prerequisites and limitations</h2>
+        <p>A real deployment would need the following conditions for this finding to be exploitable:</p>
+        <ul>
+          <li>The target uses Ravyn's built-in JWT authentication path, or equivalent code that does not independently validate the audience.</li>
+          <li>The services share a signing key or trusted verification configuration but are intended to accept different audiences.</li>
+          <li>The attacker already has a valid token issued under that shared trust configuration. No signing-key compromise or signature forgery was demonstrated or required.</li>
+          <li>The token's <code>sub</code> value resolves to an account in the target service. The resulting identity and privilege depend on the target's user-ID design.</li>
+        </ul>
+        <p>Testing used HS256, PyJWT 2.14.0, Ravyn 0.4.2 at the tested local commit, and an Edgy-backed ASGI test setup with SQLite. The MongoZ backend was source-reviewed for the same inheritance pattern but was not separately tested end-to-end. Production ASGI servers and other signing algorithms were not independently tested.</p>
+      </section>
+
+      <section>
+        <h2>Remediation</h2>
+        <p>The proposed fix has two parts:</p>
+        <ol>
+          <li>In <code>Token.decode()</code>, only default <code>verify_aud</code> to <code>False</code> when the caller has not explicitly requested audience validation. If <code>audience=</code> is supplied, let PyJWT enforce it.</li>
+          <li>Add optional <code>audience</code> and <code>issuer</code> settings to <code>JWTConfig</code>, then forward configured values from the built-in authentication backend to <code>Token.decode()</code>.</li>
+        </ol>
+        <p>This keeps existing audience-less usage compatible while allowing applications to explicitly enforce audience and issuer claims.</p>
+        <p>I tested the proposed change in a separate local copy of the repository. After the patch, mismatched and missing audiences were rejected when audience validation was requested; matching audiences continued to pass. Calls that did not request an audience retained their previous behavior, and issuer checks behaved as expected when explicitly requested.</p>
+      </section>
+
+      <section>
+        <h2>Disclosure and upstream status</h2>
+        <p>The finding was privately reported to the maintainer. The official <a href="https://github.com/dymmond/ravyn/releases/tag/v0.4.3" target="_blank" rel="noopener noreferrer">Ravyn v0.4.3 release notes</a> state that the release enforces JWT audience and issuer validation when expected values are passed to <code>Token.decode()</code> or configured for the built-in Edgy and Mongoz authentication backends. They also say that optional <code>audience</code> and <code>issuer</code> settings were added to <code>JWTConfig</code>, while deployments without an expected audience retain their existing behavior. The release notes credit <code>@sleepyguy396</code> for reporting the issue.</p>
+        <p>The release notes link the report to <a href="https://github.com/dymmond/ravyn/issues/739" target="_blank" rel="noopener noreferrer">upstream issue #739</a>.</p>
+      </section>
+
+      <section>
+        <h2>Research files</h2>
+        <ul>
+          <li><code>poc_jwt_aud.py</code> — minimal library-level comparison between PyJWT and Ravyn.</li>
+          <li><code>final_edgy_e2e.py</code> — end-to-end reproduction using Ravyn's built-in Edgy authentication backend.</li>
+        </ul>
+        <p class="placeholder">I do not include the PoC files here.</p>
+      </section>
+    </article>
+
+    <nav class="article-nav" aria-label="Other articles">
+      <a href="../index.html#research">← Back to all research</a>
+      <a href="../projects/soc-home-lab.html">Next: SOC home lab →</a>
+    </nav>
+  </main>
+  <footer>
+    <span>Michael Tsan</span>
+  </footer>
+</body>
+</html>
