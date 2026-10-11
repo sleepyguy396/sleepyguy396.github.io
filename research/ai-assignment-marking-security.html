@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Security assessment of an AI assignment-marking application: grade-state destruction on re-upload and PDF parser denial-of-service behaviours.">
+  <meta name="theme-color" content="#111111">
+  <title>AI Assignment Marking — Security Assessment | Michael Tsan</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .diagram { margin: 22px 0 28px; padding: 18px; border: 1px solid var(--line); background: #141716; border-radius: 8px; }
+    .diagram svg { display:block; width:100%; height:auto; }
+    .diagram figcaption { margin-top: 10px; color: var(--muted); font-size: 13px; }
+    .finding { margin: 22px 0; padding: 18px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+    .finding h3 { margin-top: 0; }
+    .finding .finding-meta { color: var(--muted); font-size: 13px; }
+    .tag-row { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0; }
+    .tag { border:1px solid var(--line); border-radius:999px; padding:3px 9px; color:#c9c9c9; font-size:12px; }
+    .table-wrap { overflow-x:auto; }
+    table { width:100%; border-collapse:collapse; margin:18px 0; font-size:14px; }
+    th,td { border:1px solid var(--line); text-align:left; padding:10px 12px; vertical-align:top; }
+    th { color:var(--text); background:#1b1b1b; }
+    td { color:#c9c9c9; }
+    .callout-warn { border-left-color:#e9bd71; }
+    .flow-label { font: 12px ui-monospace, SFMono-Regular, Consolas, monospace; fill:#e8e8e8; }
+    .flow-sub { font: 10px ui-monospace, SFMono-Regular, Consolas, monospace; fill:#b8c2bd; }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <a class="name" href="../index.html">Michael Tsan</a>
+    <nav aria-label="Main navigation">
+      <a href="../index.html#research">Research</a>
+      <a href="../index.html#projects">Projects</a>
+      <a href="../index.html#contact">Contact</a>
+    </nav>
+  </header>
+  <main>
+    <header class="article-header">
+      <a class="back-link" href="../index.html#research">← Back to research</a>
+      <p class="eyebrow">SECURITY RESEARCH · WEB APPLICATION / PDF PARSING</p>
+      <h1>AI Assignment Marking: security assessment</h1>
+      <p class="article-lead">A source-code audit and isolated validation of a full-stack AI grading application. The assessment confirmed a workflow flaw that can erase stored grading data on re-upload, reproduced a known PyPDF2 cross-reference denial-of-service issue, and documented a separate page-tree recursion defect.</p>
+      <div class="article-meta"><span>FastAPI</span><span>Python</span><span>PyPDF2</span><span>Source-code audit</span><span>Isolated PoC validation</span></div>
+    </header>
+
+    <article class="article-body">
+      <div class="note callout-warn"><strong>Scope and safety.</strong> Testing was performed against source code, scratch files, isolated subprocesses, or a disposable local backend with its own data directory and port. The Gemini call was stubbed where needed. No live production instance or real student data was modified. This write-up describes the evidence in the accompanying assessment; it does not imply that the maintainer has confirmed or fixed every finding.</div>
+
+      <section>
+        <h2>At a glance</h2>
+        <p>The target is a full-stack assignment-marking application that accepts student PDFs, extracts text, invokes Google Gemini for grading, performs plagiarism similarity checks, and stores submission state in a JSON file. The repository documents a FastAPI backend and React/TypeScript frontend.</p>
+      </section>
+
+      <section>
+        <h2>Findings summary</h2>
+        <div class="table-wrap"><table><thead><tr><th>Finding</th><th>Assessment</th><th>Reported impact</th></tr></thead><tbody>
+          <tr><td>Unauthenticated grade destruction by re-upload</td><td>Confirmed in isolated application path · CWE-841</td><td>Integrity and availability of stored grading data</td></tr>
+          <tr><td>PyPDF2 circular <code>/Prev</code> cross-reference chain</td><td>Known issue reproduced · CVE-2026-27628 · CWE-835 / CWE-400</td><td>CPU-bound loop can block the single-process API event loop</td></tr>
+          <tr><td>PyPDF2 self-referential <code>/Pages</code> → <code>/Kids</code></td><td>Separate technical defect · CWE-674 · no specific CVE identified in the supplied report</td><td>One request fails with <code>RecursionError</code>; process remained available in test</td></tr>
+          <tr><td>Form XObject self-reference</td><td>Not exploitable in this validation pass</td><td>No demonstrated impact</td></tr>
+        </tbody></table></div>
+      </section>
+
+      <section>
+        <h2>Finding 1 — grade destruction through re-upload</h2>
+        <p><strong>Endpoint:</strong> <code>POST /api/upload</code>. The upload handler constructs a fresh <code>Submission</code> record with upload-related fields, while grading fields such as <code>score</code>, <code>draft_feedback</code>, and <code>graded_at</code> retain their default <code>None</code> values. The storage layer's <code>upsert()</code> replaces the complete record keyed by <code>student_id</code>, rather than merging upload fields into the existing submission.</p>
+        <figure class="diagram">
+          <svg viewBox="0 0 680 188" role="img" aria-label="Before and after state showing a graded submission replaced by a new ungraded record">
+            <rect x="8" y="14" width="290" height="145" rx="7" fill="#18221d" stroke="#78d6b0"/>
+            <text x="153" y="37" text-anchor="middle" class="flow-label">BEFORE · GRADED RECORD</text>
+            <text x="28" y="64" class="flow-sub">student_id: S90000001</text><text x="28" y="85" class="flow-sub">score: 88</text><text x="28" y="104" class="flow-sub">draft_feedback: present</text><text x="28" y="123" class="flow-sub">graded_at: timestamp</text>
+            <path d="M302 86 H365" stroke="#e9bd71" stroke-width="2"/><path d="M355 78 L365 86 L355 94" fill="none" stroke="#e9bd71" stroke-width="2"/>
+            <text x="333" y="68" text-anchor="middle" class="flow-sub">upsert</text>
+            <rect x="372" y="14" width="300" height="145" rx="7" fill="#292018" stroke="#e9bd71"/>
+            <text x="522" y="37" text-anchor="middle" class="flow-label">AFTER · REPLACED RECORD</text>
+            <text x="392" y="64" class="flow-sub">student_id: S90000001</text><text x="392" y="85" class="flow-sub">score: null</text><text x="392" y="104" class="flow-sub">draft_feedback: null</text><text x="392" y="123" class="flow-sub">graded_at: null</text>
+            <text x="340" y="180" text-anchor="middle" class="flow-sub">Observed in scratch storage and a disposable local HTTP instance</text>
+          </svg>
+          <figcaption>The supplied PoC reported a transition from score 88 to null after a successful re-upload. An invalid/unparseable PDF failed before the upsert and left the existing grade unchanged.</figcaption>
+        </figure>
+        <h3>Why it matters</h3>
+        <ul>
+          <li>The tested operation did not require authentication in the isolated app.</li>
+          <li>The prerequisite was knowledge of an existing numeric student ID; the original filename was not required.</li>
+          <li>The demonstrated effect was overwriting one matching record, not changing its student ID. The report did not identify this as an IDOR/BOLA issue.</li>
+          <li>The assessment observed cross-origin requests executing despite a disallowed <code>Origin</code> header and considered CSRF a possible delivery mechanism. Browser exploitability still depends on deployment details such as authentication/session model and browser request constraints.</li>
+        </ul>
+        <p class="finding-meta">Severity in supplied report: Medium–High · CWE-841</p>
+        <h3>Root cause and remediation</h3>
+        <p>The problem is a workflow/state-management failure: upload and grading state are stored in the same record, and the upsert is a full replacement. Safer options are to reject re-upload of graded submissions, require an explicit reset confirmation, or merge upload-specific fields while preserving grading state by default. Any operation that clears a grade should be authorized, explicit, and auditable.</p>
+      </section>
+
+      <section>
+        <h2>Finding 2 — circular PDF <code>/Prev</code> chain</h2>
+        <p>The report reproduced <strong>CVE-2026-27628</strong> in the application's installed <code>PyPDF2 3.0.1</code> code path. The parser follows cross-reference history through a <code>while startxref is not None</code> loop, but the reviewed version does not track visited offsets. A crafted PDF whose trailer's <code>/Prev</code> points back to the same cross-reference section can therefore keep the loop running indefinitely.</p>
+        <figure class="diagram">
+          <svg viewBox="0 0 680 170" role="img" aria-label="Circular previous cross-reference pointer creates an infinite loop in the PDF parser">
+            <rect x="18" y="44" width="190" height="68" rx="7" fill="#1b2621" stroke="#78d6b0"/><text x="113" y="69" text-anchor="middle" class="flow-label">xref section</text><text x="113" y="88" text-anchor="middle" class="flow-sub">offset 186</text>
+            <path d="M208 78 H280" stroke="#e9bd71" stroke-width="2"/><path d="M270 70 L280 78 L270 86" fill="none" stroke="#e9bd71" stroke-width="2"/>
+            <rect x="286" y="44" width="164" height="68" rx="7" fill="#292018" stroke="#e9bd71"/><text x="368" y="69" text-anchor="middle" class="flow-label">trailer /Prev</text><text x="368" y="88" text-anchor="middle" class="flow-sub">points to 186</text>
+            <path d="M450 78 H510" stroke="#e9bd71" stroke-width="2"/><path d="M510 78 C560 78 560 25 450 25 H115 C65 25 65 34 65 43" fill="none" stroke="#e9bd71" stroke-width="2" stroke-dasharray="5 4"/><text x="510" y="99" class="flow-sub">repeat forever</text>
+            <text x="340" y="145" text-anchor="middle" class="flow-sub">Observed isolated run: ~98% of one CPU core for 2.5 seconds, still running</text>
+          </svg>
+          <figcaption>The PDF is small, but parsing runs synchronously within an async route. In a single-process Uvicorn setup, the busy loop blocks the event loop and stalls API requests until the process is terminated/restarted.</figcaption>
+        </figure>
+        <p>The supplied report validated the behaviour in a timeout-bounded subprocess and a disposable application copy, not against the live service. It attributes the issue to CVE-2026-27628 rather than claiming a new CVE. The recommended fix is migration to a maintained <code>pypdf</code> release containing the fix (the report specifies ≥ 6.7.2), alongside parser isolation and hard resource/time limits.</p>
+        <p class="finding-meta">Severity in supplied report: High at application level · CWE-835 / CWE-400 · CVE-2026-27628 is a known issue reproduced in the deprecated PyPDF2 fork.</p>
+      </section>
+
+      <section>
+        <h2>Finding 3 — page-tree recursion</h2>
+        <p>A separate malformed PDF can make a <code>/Pages</code> node list itself in its <code>/Kids</code> array. PyPDF2's recursive <code>_flatten()</code> traversal then revisits the same node without cycle detection or a depth bound and eventually raises <code>RecursionError</code>.</p>
+        <pre><code>/Type /Pages
+/Kids [2 0 R]   # the node references itself</code></pre>
+        <p>In the supplied isolated test, the failure occurred after roughly 498 recursive calls in a few milliseconds. The same interpreter and disposable service handled a subsequent valid PDF successfully, so the demonstrated effect differed from the CPU-bound <code>/Prev</code> loop: this one request returned an HTTP 500, but did not keep the backend unavailable.</p>
+        <p>The report notes that the analogous traversal defect was fixed in maintained <code>pypdf</code> 6.13.2, while PyPDF2 3.0.1 is deprecated and will not receive that fix.</p>
+        <p class="finding-meta">Severity in supplied report: Low · CWE-674.</p>
+      </section>
+
+      <section>
+        <h2>Validation methodology and boundaries</h2>
+        <ul>
+          <li>Reviewed the FastAPI upload and storage flow and the installed PDF parser's source.</li>
+          <li>Used scratch JSON storage and synthetic IDs for the grade overwrite test.</li>
+          <li>Used a disposable app instance with its own data directory and port; Gemini was stubbed to avoid production credentials.</li>
+          <li>Ran the PDF parser hang in a timeout-bounded subprocess and checked CPU usage and follow-up service behaviour.</li>
+          <li>Did not test against the live production server or real student data.</li>
+          <li>The report explicitly states that RCE, SSRF, credential exposure, or a new IDOR/BOLA issue were not identified in this validation pass; LLM/prompt-injection testing was not performed.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Recommended remediation priorities</h2>
+        <ol>
+          <li><strong>Preserve grading state:</strong> make re-upload semantics explicit; prevent silent clearing of score, feedback, and grading timestamps; record state changes in an audit log.</li>
+          <li><strong>Replace the vulnerable parser path:</strong> migrate from deprecated PyPDF2 to a maintained <code>pypdf</code> version containing the relevant fixes.</li>
+          <li><strong>Isolate PDF parsing:</strong> move potentially blocking parsing out of the ASGI event loop into a process/thread boundary with enforceable time and resource limits. A timeout on a coroutine alone does not necessarily stop CPU-bound code running in the same thread.</li>
+          <li><strong>Harden uploads and browser request handling:</strong> apply size and parse-time limits, validate file content, require appropriate authorization and CSRF protections, and avoid trusting the <code>Origin</code> header as the only security control.</li>
+        </ol>
+      </section>
+
+      <section>
+        <h2>Source and report</h2>
+        <p><a href="https://github.com/DungLai/AI-Assignment-Marking" target="_blank" rel="noopener noreferrer">View AI Assignment Marking repository ↗</a></p>
+        <p>The findings and test observations on this page are derived from my supplied <em>AI Assignment Marking — Security Assessment</em> report and its separate PoC notes for grade destruction, circular <code>/Prev</code> handling, and page-tree recursion. Only the key behaviour and defensive implications are reproduced here; this page intentionally omits a ready-to-run destructive request sequence.</p>
+      </section>
+    </article>
+    <nav class="article-nav" aria-label="Other articles">
+      <a href="../index.html#research">← Back to all research</a>
+      <a href="ravyn-jwt-audience.html">Previous: Ravyn JWT research →</a>
+    </nav>
+  </main>
+  <footer><span>Michael Tsan</span></footer>
+</body>
+</html>
