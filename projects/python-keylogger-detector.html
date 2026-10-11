@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A technical case study of a Python keyboard-input logging proof of concept and a process-name heuristic detector, with defensive analysis and validation ideas.">
+  <meta name="theme-color" content="#111111">
+  <title>Python Keylogger & Detector — Michael Tsan</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .case-figure{margin:1.25rem 0;padding:1rem;border:1px solid var(--border,#303030);border-radius:14px;background:rgba(255,255,255,.025)}
+    .case-figure svg{display:block;width:100%;height:auto;max-height:340px}
+    .case-figure figcaption,.small-note{font-size:.9rem;opacity:.78;margin-top:.75rem}
+    .analysis-table{width:100%;border-collapse:collapse;margin:1rem 0;font-size:.95rem}
+    .analysis-table th,.analysis-table td{padding:.75rem;text-align:left;vertical-align:top;border-bottom:1px solid var(--border,#303030)}
+    .analysis-table th{font-weight:650}
+    .code-sample{overflow:auto;padding:1rem;border-radius:10px;background:#0b0d0e;border:1px solid #303638;color:#d9e5e5;font: .88rem/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre}
+    .callout{padding:1rem;border-left:3px solid #7fd7b5;background:rgba(127,215,181,.07);border-radius:0 10px 10px 0}
+    .tag-row{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:1rem}.tag-row span{border:1px solid var(--border,#303030);border-radius:999px;padding:.25rem .65rem;font-size:.82rem}
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <a class="name" href="../index.html">Michael Tsan</a>
+    <nav aria-label="Main navigation"><a href="../index.html#research">Research</a><a href="../index.html#projects">Projects</a><a href="../index.html#contact">Contact</a></nav>
+  </header>
+  <main>
+    <header class="article-header">
+      <a class="back-link" href="../index.html#projects">← Back to projects</a>
+      <p class="eyebrow">PROJECT · ENDPOINT SECURITY / DETECTION ENGINEERING</p>
+      <h1>Python Keylogger & Detector</h1>
+      <p class="article-lead">A paired offensive-behaviour and defensive-analysis lab: inspect a minimal Python keyboard-input logger, then evaluate a process-name heuristic intended to flag potentially suspicious processes.</p>
+      <div class="article-meta"><span>Python</span><span>pynput</span><span>psutil</span><span>Endpoint telemetry</span><span>Detection limitations</span></div>
+      <div class="links">
+        <a href="https://github.com/sleepyguy396/Python-Keylogger" target="_blank" rel="noopener noreferrer">View source repository ↗</a>
+        <a href="https://github.com/sleepyguy396/Python-Keylogger/blob/main/keylogger.py" target="_blank" rel="noopener noreferrer">Review keylogger.py ↗</a>
+        <a href="https://github.com/sleepyguy396/Python-Keylogger/blob/main/detection/Keylogger_Detector.py" target="_blank" rel="noopener noreferrer">Review detector source ↗</a>
+      </div>
+      <div class="tag-row"><span>Source-code review</span><span>Behaviour mapping</span><span>Safe lab only</span></div>
+    </header>
+
+    <article class="article-body">
+      <section>
+        <h2>01 — Objective & scope</h2>
+        <p>This project puts a small keyboard-input logging proof of concept beside a simple defensive detector. The goal is not to claim complete keylogger detection; it is to understand what the sample does, what the detector actually observes, and where a name-based heuristic falls short.</p>
+        <p>The repository README describes two components: <code>keylogger.py</code> and <code>detection/Keylogger_Detector.py</code>. The analysis below is grounded in those source files. It does not claim that the detector has been validated against a representative malware dataset or that endpoint-product efficacy has been measured.</p>
+        <div class="callout"><strong>Safety boundary:</strong> use only in a disposable, isolated lab with synthetic typing and accounts you control. Do not collect credentials or other people's input. The diagrams on this page are explanatory illustrations, not screenshots or proof of a completed test run.</div>
+      </section>
+
+      <section>
+        <h2>02 — Architecture & data flow</h2>
+        <figure class="case-figure">
+          <svg viewBox="0 0 760 260" role="img" aria-labelledby="flow-title flow-desc">
+            <title id="flow-title">Project components and observation points</title><desc id="flow-desc">A keyboard event is handled by a Python listener and appended to a local text file. Separately, a detector enumerates running processes and checks process names against a short list.</desc>
+            <defs><marker id="arrow-kd" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#7fd7b5"/></marker></defs>
+            <rect x="12" y="20" width="218" height="92" rx="10" fill="#13201b" stroke="#477763"/><text x="121" y="46" text-anchor="middle" fill="#a5f0d2" font-size="14" font-weight="600">Keyboard event</text><text x="121" y="68" text-anchor="middle" fill="#dce7e2" font-size="12">Local, authorised test input</text><text x="121" y="88" text-anchor="middle" fill="#9eb8ad" font-size="11">Synthetic / non-sensitive</text>
+            <rect x="272" y="20" width="218" height="92" rx="10" fill="#172027" stroke="#4c7182"/><text x="381" y="46" text-anchor="middle" fill="#a9dff3" font-size="14" font-weight="600">pynput Listener</text><text x="381" y="68" text-anchor="middle" fill="#dce7e2" font-size="12">on_press callback</text><text x="381" y="88" text-anchor="middle" fill="#9eb8ad" font-size="11">ESC returns False</text>
+            <rect x="532" y="20" width="216" height="92" rx="10" fill="#211e15" stroke="#887346"/><text x="640" y="46" text-anchor="middle" fill="#f0d79b" font-size="14" font-weight="600">keylog.txt</text><text x="640" y="68" text-anchor="middle" fill="#e7e0d0" font-size="12">Append one key per line</text><text x="640" y="88" text-anchor="middle" fill="#bdb39a" font-size="11">Local file I/O indicator</text>
+            <path d="M230 66H266 M490 66H526" stroke="#7fd7b5" stroke-width="2" marker-end="url(#arrow-kd)" fill="none"/>
+            <path d="M640 112V145H381V158" stroke="#7fd7b5" stroke-width="2" stroke-dasharray="5 4" fill="none" marker-end="url(#arrow-kd)"/>
+            <rect x="272" y="164" width="218" height="78" rx="10" fill="#201a28" stroke="#7a6595"/><text x="381" y="188" text-anchor="middle" fill="#d8c4f5" font-size="14" font-weight="600">Detector (psutil)</text><text x="381" y="208" text-anchor="middle" fill="#e4dced" font-size="12">Enumerates process names</text><text x="381" y="226" text-anchor="middle" fill="#b9abc9" font-size="11">Substring heuristic only</text>
+            <text x="20" y="190" fill="currentColor" opacity=".75" font-size="12">Separate components</text><text x="20" y="208" fill="currentColor" opacity=".75" font-size="11">No code-level correlation</text><text x="20" y="224" fill="currentColor" opacity=".75" font-size="11">between file output and alerts</text>
+          </svg>
+          <figcaption>Conceptual view of the two components. The repository's detector scans process names; it does not inspect <code>keylog.txt</code> or correlate a process with keyboard-hook activity.</figcaption>
+        </figure>
+        <p>The keylogger and detector are separate scripts. That separation matters: the existence of both components does not mean the detector automatically detects the logger, nor that an alert proves malicious behaviour.</p>
+      </section>
+
+      <section>
+        <h2>03 — Source analysis: keyboard-input logger</h2>
+        <p>The source file is intentionally small. Its key behaviours can be traced directly:</p>
+        <ol>
+          <li><strong>Register a global keyboard listener:</strong> <code>Listener(on_press=log_keystroke)</code> routes press events to a callback.</li>
+          <li><strong>Define a stop condition:</strong> if the event equals <code>Key.esc</code>, the callback returns <code>False</code>, which stops the listener.</li>
+          <li><strong>Normalise the event representation:</strong> it converts the key object to a string and removes single-quote characters.</li>
+          <li><strong>Append to a local file:</strong> the script opens <code>keylog.txt</code> in append mode and writes one event representation per line.</li>
+          <li><strong>Wait for listener completion:</strong> <code>listener.join()</code> blocks until the listener exits, after which the program prints a stopped message.</li>
+        </ol>
+        <div class="code-sample">from pynput.keyboard import Listener, Key
+
+# Behaviour summary from keylogger.py
+if key == Key.esc:
+    return False
+
+key = str(key).replace("'", "")
+with open("keylog.txt", "a") as log_file:
+    log_file.write(key + "\n")</div>
+        <p class="small-note">This is a short excerpt for code comprehension, not a full implementation guide. Source: <a href="https://github.com/sleepyguy396/Python-Keylogger/blob/main/keylogger.py" target="_blank" rel="noopener noreferrer">keylogger.py</a>.</p>
+        <table class="analysis-table"><thead><tr><th>Code behaviour</th><th>Observable artefact</th><th>Analyst question</th></tr></thead><tbody>
+          <tr><td>Global keyboard listener</td><td>Input-monitoring API use; runtime behaviour depends on OS and permissions</td><td>Is this application expected to monitor input, and did the user consent?</td></tr>
+          <tr><td>Append-mode file open</td><td>Repeated writes to <code>keylog.txt</code></td><td>Which process created or modified the file, and when?</td></tr>
+          <tr><td>ESC stop condition</td><td>Listener termination after a specific key event</td><td>Can the end of a test session be tied to the process timeline?</td></tr>
+        </tbody></table>
+      </section>
+
+      <section>
+        <h2>04 — Source analysis: process-name detector</h2>
+        <p>The detector uses <code>psutil.process_iter(['pid', 'name'])</code> to enumerate processes and compares each lower-cased process name against three substrings: <code>keylogger</code>, <code>logkeys</code>, and <code>xinput</code>. If any substring appears, it prints the process name and PID. It catches <code>NoSuchProcess</code>, <code>AccessDenied</code>, and <code>ZombieProcess</code> exceptions so a changing process list does not abort the scan.</p>
+        <figure class="case-figure">
+          <svg viewBox="0 0 760 210" role="img" aria-labelledby="det-title det-desc">
+            <title id="det-title">Detector decision flow</title><desc id="det-desc">Enumerate process, read name, lowercase and compare with known substrings. A match prints a suspicious-process message; no match moves to the next process.</desc>
+            <defs><marker id="arrow-det" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#a9dff3"/></marker></defs>
+            <rect x="12" y="24" width="160" height="54" rx="8" fill="#172027" stroke="#4c7182"/><text x="92" y="46" fill="#dce7e2" text-anchor="middle" font-size="13">Enumerate process</text><text x="92" y="63" fill="#a9dff3" text-anchor="middle" font-size="11">psutil</text>
+            <rect x="212" y="24" width="160" height="54" rx="8" fill="#172027" stroke="#4c7182"/><text x="292" y="46" fill="#dce7e2" text-anchor="middle" font-size="13">Read process name</text><text x="292" y="63" fill="#a9dff3" text-anchor="middle" font-size="11">lower()</text>
+            <path d="M172 51H206 M372 51H406" stroke="#a9dff3" stroke-width="2" fill="none" marker-end="url(#arrow-det)"/>
+            <path d="M466 20L526 51L466 82L406 51Z" fill="#201a28" stroke="#7a6595"/><text x="466" y="48" fill="#e4dced" text-anchor="middle" font-size="11">Substring</text><text x="466" y="61" fill="#e4dced" text-anchor="middle" font-size="11">match?</text>
+            <path d="M526 51H564V35H580 M466 82V139H580" stroke="#a9dff3" stroke-width="2" fill="none" marker-end="url(#arrow-det)"/>
+            <text x="543" y="43" fill="currentColor" font-size="10">Yes</text><text x="477" y="105" fill="currentColor" font-size="10">No</text>
+            <rect x="586" y="10" width="160" height="50" rx="8" fill="#211e15" stroke="#887346"/><text x="666" y="31" fill="#f0d79b" text-anchor="middle" font-size="12">Print name + PID</text><text x="666" y="46" fill="#bdb39a" text-anchor="middle" font-size="10">Potential alert</text>
+            <rect x="586" y="116" width="160" height="50" rx="8" fill="#13201b" stroke="#477763"/><text x="666" y="137" fill="#a5f0d2" text-anchor="middle" font-size="12">Continue scan</text><text x="666" y="152" fill="#9eb8ad" text-anchor="middle" font-size="10">Next process</text>
+          </svg>
+          <figcaption>The current detector is a name-based heuristic, not a behavioural or memory-analysis engine.</figcaption>
+        </figure>
+        <p>Its main value is as a first exercise in process enumeration and heuristic matching. It is transparent and easy to reason about, but the match itself is weak evidence: names can be changed, benign tools can match, and suspicious input monitoring can run inside a generically named Python process.</p>
+        <p><a href="https://github.com/sleepyguy396/Python-Keylogger/blob/main/detection/Keylogger_Detector.py" target="_blank" rel="noopener noreferrer">Review the detector source ↗</a></p>
+      </section>
+
+      <section>
+        <h2>05 — Detection evaluation matrix</h2>
+        <table class="analysis-table"><thead><tr><th>Signal</th><th>What the current project can show</th><th>Blind spot / next validation</th></tr></thead><tbody>
+          <tr><td>Process name contains a listed string</td><td>Prints the process name and PID as a potential match.</td><td>False positives and easy name evasion; add process path, signer, parent process and command-line context where available.</td></tr>
+          <tr><td>Keyboard-listener API usage</td><td>Visible in static source review; runtime evidence requires separate telemetry.</td><td>Current detector does not inspect API use or Python imports.</td></tr>
+          <tr><td>Writes to <code>keylog.txt</code></td><td>Visible in source; the sample logger writes events to this local file.</td><td>Current detector does not inspect file events or connect file writes to a process.</td></tr>
+          <tr><td>Suspicious process plus file activity</td><td>Not correlated by the current implementation.</td><td>Correlate process identity, file writes, user session and timestamps in a lab telemetry pipeline.</td></tr>
+        </tbody></table>
+        <p>A stronger detector would combine several independent signals and provide context, instead of treating a process-name match as a verdict. For example, an analyst could correlate process ancestry, executable path, unusual input-monitoring behaviour, and repeated writes to a log-like file. These are proposed improvements, not features already implemented in this repository.</p>
+      </section>
+
+      <section>
+        <h2>06 — Safe validation plan</h2>
+        <ol>
+          <li><strong>Static review first:</strong> inspect the two scripts and record their exact revision before any execution.</li>
+          <li><strong>Isolate the environment:</strong> use a disposable VM and synthetic, non-sensitive typing; avoid shared clipboard, real accounts, and production data.</li>
+          <li><strong>Validate the detector with benign fixtures:</strong> test the matching logic using controlled process-name examples or a unit-test mock rather than collecting real keystrokes.</li>
+          <li><strong>Record expected vs actual:</strong> save detector stdout, test setup, OS/Python versions and timestamps. Do not claim a pass without this evidence.</li>
+          <li><strong>Measure both errors:</strong> document false positives from legitimate names and false negatives when a test process has a generic name.</li>
+          <li><strong>Clean up:</strong> stop the test, remove synthetic logs and revert the disposable VM snapshot.</li>
+        </ol>
+        <div class="callout"><strong>Evidence status:</strong> this page documents behaviour visible in source code and proposes a validation plan. It does not assert measured detection rates, successful EDR integration, or a completed live test.</div>
+      </section>
+
+      <section>
+        <h2>07 — Limitations & lessons learned</h2>
+        <ul>
+          <li><strong>Heuristic quality:</strong> process-name matching is brittle and can generate false positives or miss renamed/generic processes.</li>
+          <li><strong>Limited telemetry:</strong> the detector does not inspect keyboard hooks, file writes, process ancestry, persistence, or network behaviour.</li>
+          <li><strong>No correlation:</strong> the two scripts are separate; the detector does not establish that the logger caused a file change.</li>
+          <li><strong>Platform dependence:</strong> keyboard-listener behaviour and permissions can vary by operating system and desktop environment.</li>
+          <li><strong>Evidence discipline:</strong> source-code analysis supports a description of intended behaviour, while empirical claims require reproducible logs and test records.</li>
+        </ul>
+        <p>The main lesson is that a useful defensive signal needs context. A process name can be a starting point for triage, but a reliable conclusion comes from correlated telemetry, repeatable validation and an explicit account of uncertainty.</p>
+      </section>
+
+      <section>
+        <h2>Repository & references</h2>
+        <ul>
+          <li><a href="https://github.com/sleepyguy396/Python-Keylogger" target="_blank" rel="noopener noreferrer">Project repository</a></li>
+          <li><a href="https://github.com/sleepyguy396/Python-Keylogger/blob/main/README.md" target="_blank" rel="noopener noreferrer">Repository README and project structure</a></li>
+          <li><a href="https://github.com/sleepyguy396/Python-Keylogger/blob/main/keylogger.py" target="_blank" rel="noopener noreferrer">Keyboard logger source</a></li>
+          <li><a href="https://github.com/sleepyguy396/Python-Keylogger/blob/main/detection/Keylogger_Detector.py" target="_blank" rel="noopener noreferrer">Detector source</a></li>
+        </ul>
+      </section>
+    </article>
+    <nav class="article-nav" aria-label="Other projects"><a href="windows-server-lab.html">← Previous: Windows Server lab</a><a href="../index.html#projects">Back to projects →</a></nav>
+  </main>
+  <footer><span>Michael Tsan</span></footer>
+</body>
+</html>
